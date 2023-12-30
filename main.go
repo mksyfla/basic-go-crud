@@ -1,83 +1,37 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"net/http"
+	"log"
+	"pustaka-api/book"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
 
 func main() {
+	dsn := "root:root@tcp(127.0.0.1:3306)/pustaka_api?charset=utf8mb4&parseTime=True&loc=Local"
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+
+	if err != nil {
+		log.Fatal("DB connection fail")
+	}
+
+	db.AutoMigrate(&book.Book{})
+
+	bookRepository := book.NewRepository(db)
+	bookService := book.NewService(bookRepository)
+	bookHandler := book.NewHandler(bookService)
+
 	router := gin.Default()
 
 	v1 := router.Group("v1")
 
-	v1.GET("/", rootHandler)
-	v1.GET("/hello", helloHandler)
-	v1.GET("/books/", booksHandler)
-	v1.GET("/books/:id", bookHandler)
-
-	v1.POST("/books", postBooksHandler)
+	v1.GET("/books/", bookHandler.GetBooks)
+	v1.GET("/books/:id", bookHandler.GetBookByID)
+	v1.POST("/books", bookHandler.PostBook)
+	v1.PUT("/books/:id", bookHandler.UpdateBookByID)
+	v1.DELETE("/books/:id", bookHandler.DeleteBookByID)
 
 	router.Run()
-}
-
-func rootHandler(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"name": "Kasyfil",
-		"bio":  "Golang Gin Routing Test",
-	})
-}
-
-func helloHandler(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"name": "Hello World",
-		"bio":  "Golang Gin Routing Test (Root /hello)",
-	})
-}
-
-func bookHandler(c *gin.Context) {
-	id := c.Param("id")
-
-	c.JSON(http.StatusOK, gin.H{
-		"id": id,
-	})
-}
-
-func booksHandler(c *gin.Context) {
-	title := c.Query("title")
-	price := c.QueryArray("price")
-
-	c.JSON(http.StatusOK, gin.H{
-		"title": title,
-		"price": price,
-	})
-}
-
-type bookInput struct {
-	Title string      `json:"title" binding:"required"`
-	Price json.Number `json:"price" binding:"required,number"`
-}
-
-func postBooksHandler(c *gin.Context) {
-	var book bookInput
-
-	err := c.ShouldBindJSON(&book)
-	if err != nil {
-		var errorMessage []string
-		for _, e := range err.(validator.ValidationErrors) {
-			errorMessage = append(errorMessage, fmt.Sprintf("error on field %s, condition, %s", e.Field(), e.ActualTag()))
-		}
-		c.JSON(http.StatusBadRequest, gin.H{
-			"errors": errorMessage,
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"title": book.Title,
-		"price": book.Price,
-	})
 }
